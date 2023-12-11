@@ -11,7 +11,7 @@ pacman:: p_load(
 
 # Importing and loading Hospital Aggregates Dataset in a directory
 Hospital_Aggregates_raw <- read_csv("Data/HU_HA.csv")
-Hospital_Aggregates_raw
+head(Hospital_Aggregates_raw)
 
 
 list.files("Scripts")
