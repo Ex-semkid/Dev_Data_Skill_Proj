@@ -1,0 +1,657 @@
+---
+title: "AVERAGE LENGTH OF STAY (ALOS) IN OECD COUNTRIES"
+subtitle: "Curative Care ALOS vs Impatient Care ALOS"
+author: "Report by **B239464** to Healthcare Researchers"
+date: "`r format(Sys.time(), '%d-%m-%Y')`"
+format:
+  html:
+    number_sections: yes
+    theme: cayman
+    highlight: github
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+	echo = TRUE,
+	message = FALSE,
+	warning = FALSE
+)
+```
+
+![](images/Edinburgh%20Logo.png){width="680"}
+
+# INTRODUCTION
+
+## Average Length of Stay (ALOS)
+
+The average length of stay is a broad term that that is used to evaluate
+hospital efficiency and patient management. It mainly consists of two
+kinds:
+
+-   **Impatient Care Average Length of Stay**
+
+-   **Curative Care Average Length of Stay**
+
+Data regarding the above topic is found within the Healthcare
+Utilization: Hospital aggregate dataset. Click
+[Here](https://stats.oecd.org/index.aspx?queryid=30145) to view the
+dataset.
+
+This report focuses more on the Average length of stay in the organisation for economic co-operation & development countries.
+
+The code chunk written below will contains libraries that will be loaded
+from respective packages which will be used on the course of this
+Analytic report.
+
+```{r libraries, message=FALSE}
+pacman:: p_load(
+  "rmarkdown", "tinytex", "tidyverse", "knitr", 
+  "prettydoc", "rmdformats", "kableExtra", 
+  "plotly", "visdat", "here", "finalfit", 
+  "janitor", "patchwork")
+```
+
+## Load Raw Dataset
+
+This is the Hospital Aggregates raw data set which includes the
+Impatient care Average length of stay and Curative care average length
+of stay that will be extracted for insights
+
+```{r message=FALSE}
+# Importing and loading Hospital Aggregates Dataset in a directory
+Hospital_Aggregates_raw <- read_csv(here("Data/HU_HA.csv"))
+```
+
+## Raw Data Structure and Summary
+
+Now let's look at the structure and summmary of our dataset and prior to
+data cleaning
+
+```{r message=FALSE}
+# familiarizing and understanding the dataset
+head(Hospital_Aggregates_raw)
+# Visualizing the variable types
+vis_dat(Hospital_Aggregates_raw)
+distinct(Hospital_Aggregates_raw , Variable) # No. of Variables present
+```
+
+## Data Cleaning 1.0
+
+The Hospital Aggregate raw data set is explored and wrangled to get
+complete and sufficient data as the average days for both Inpatient care
+ALOS and Creative care ALOS is determined in the last decade.
+
+```{r}
+data_hg <- Hospital_Aggregates_raw %>% 
+  select(Year, Country, Variable, Measure, Value) %>%
+  filter(Variable %in% c("Inpatient care average length of stay (all hospitals)", 
+                         "Curative care average length of stay")) %>% 
+  clean_names() %>% 
+  filter(!(year %in% c(2021:2022)) & !(country %in% c("Brazil",
+                                                      "Bulgaria",
+                                                      "China (People's Republic of)", 
+                                                      "Croatia",
+                                                      "Romania",
+                                                      "Russia",
+                                                      "South Africa"))) %>% # exclude all non-oecd countries
+  drop_na() %>% #drop all rows with NA values 
+  arrange(year)
+
+data_hg %>% 
+  distinct(measure) # check for distinct observation
+
+data_hg %>% 
+  tabyl(country) %>% # Tabulate the data by country and counts no. of values 
+  filter(n < 22) # 22 values for each year and remove countries less than 22
+   
+
+mean_year <- data_hg %>% 
+  filter(!(country %in% c("Canada",
+                   "Chile",
+                   "Colombia", 
+                   "Denmark",
+                   "Greece",
+                   "Mexico",
+                   "Netherlands",
+                   "Slovak Republic"))) %>%
+  group_by(year, variable, measure) %>% 
+  summarize(mean_value = mean(value)) %>% 
+  mutate(mean_value = round(mean_value, 1)) %>% 
+  ungroup()
+```
+
+## Vizualizing Average Length of Stay
+
+A line graph showing the difference between the Curative care ALOS and
+Inpatient care ALOS from 2010-2020.
+
+```{r fig.height=8, fig.width=10}
+gap_years <- seq(from = 2010, to = 2020, by = 1) # gap of 1 year from 2010-2020
+
+  ggplot(mean_year, mapping = aes(x = year, y = mean_value, color = variable)) +
+  geom_line(linewidth = 1) + geom_point(color = "black") + 
+  scale_x_continuous(breaks = gap_years) + 
+  geom_text(aes(label = mean_value, vjust = -0.3)) + theme(legend.position = "top") +
+  theme(legend.title = element_blank()) +
+  labs(title = "AVERAGE LENGTH OF STAY",
+       subtitle = "Curative care ALOS vs Impatient care ALOS in the Last Decade",
+       x = "Year", y = "Average Days",
+       caption = "source: https://stats.oecd.org
+       accessed Sunday 7th November, 2023")
+```
+
+From the Plot above, one can tell that Impatient ALOS tends to be higher
+than the Curative ALOS. Going further, the two variables down trended as
+years went by in the last decade with a marked uptrend in 2020. This is
+sign that most OECD countries are doing fine in terms of Healthcare
+efficiency
+
+Overall, It shows that curative care could be a subset to inpatient care
+since curative care may lead to inpatient care if triggered by some
+factors and not the other way round.
+
+## Pivoting from long to wide data
+
+The dataset is currently a long data but we need to change to wide data
+in other to access and easily wrangle the `Variable` and `Measure`
+columns with there respective `Values`. At the end, the column names are
+cleaned to snake case for better manipulation.
+
+```{r}
+# Pivoting from long to wide data
+wide_data <- Hospital_Aggregates_raw %>%
+  pivot_wider(names_from = c(Variable, Measure),
+              values_from = Value,
+              id_cols = c(Year, Country))%>% 
+  clean_names() # clean names to lower and snake case for easy manipulation
+```
+
+## Data Cleaning 2.0
+
+Now Data cleaning is done by selecting and renaming the main variables
+for the report:
+
+-   `Impatient Care Average Length of Stay`
+
+-   `Curative Care Average Length of Stay`
+
+The `year` and `country` variables are needed too during the analysis.
+
+Going forward, since the report is on about the last decade, the year
+2021 & 2022 is filtered out of the data and the Non-organisation for
+economic co-operation & development countries (Non-OECD), thereby
+isolating only the organisation for economic co-operation & development
+countries (OECD) for the report.
+
+All rows containing NA values are dropped as only countries with
+complete data on the Inpatient ALOS Care and Curative Care ALOS are
+needed for further analysis
+
+```{r}
+clean_data <- wide_data %>%
+  select(year, country, 
+         inpatient_care_alos = inpatient_care_average_length_of_stay_all_hospitals_days, 
+         curative_care_alos = curative_care_average_length_of_stay_days) %>%
+  filter(!(year %in% c(2021:2022)) & !(country %in% c("Brazil",
+                        "Bulgaria",
+                        "China (People's Republic of)", 
+                        "Croatia",
+                        "Romania",
+                        "Russia",
+                        "South Africa"))) %>% # exclude year: 2021-2022 a& all non-oecd countries
+  drop_na() %>% # Drop all rows with NA values
+  arrange(country) # Arrange by ascending order by default
+```
+
+It appears **Greece** and **Slovakia Republic** had empty cells for 5
+years and a year respectively. So, we filter them out as other countries
+with NA values has already been dropped too. All these filtering and
+dropping helps to give a good sample of complete data to work with.
+
+```{r}
+# Check and view for missing value either in Impatient ALOS or Curative ALOS
+clean_data %>% 
+  tabyl(country, year) %>% # tabulates country on rows and year columns 
+  View()
+
+oecd_countries <- clean_data %>% 
+  filter(!(country %in% c("Greece", "Slovak Republic"))) 
+# Both countries had empty values in 1 or more years
+
+# Cross check if code was successful
+oecd_countries %>%
+  tabyl(country, year) %>% 
+  View()
+```
+
+------------------------------------------------------------------------
+
+# INPATIENT CARE ALOS
+
+The Inpatient care average length of stay (ALOS) is a crucial metric
+that measures the duration of a patient's hospitalization. It is often
+used as an indicator of efficiency. Understanding the determinants of
+ALOS can shed light on healthcare resource utilization, patient
+outcomes, and the efficiency of healthcare delivery. This is done in a
+hospital.
+
+**Formula**:
+
+**Total number of days stayed by all inpatients during a year** divided
+by **the number of admissions or discharges**. The indicator excludes
+days cases.
+
+# CURATIVE CARE ALOS
+
+Curative care, also known as acute care, is the type of medical care
+focused on diagnosing and treating acute conditions or injuries. It
+involves hospitalization and is generally aimed at providing immediate
+relief and restoring health. This can be done in hospital, clinics,
+homes etc. This technically means that the curative care ALOS is a
+subset of Inpatient Care ALOS.
+
+**Formula**:
+
+**Number of curative care bed-days divided** divided by **number of
+curative care discharge during the year**
+
+# FACTORS AFFECTING ALOS & IT'S IMPLICATIONS
+
+## Factors:
+
+1.  **Severity and Complexity of Illness**: The severity and complexity
+    of a patient's condition significantly impact the ALOS. Patients
+    with more severe or complex illnesses such as cancer or
+    cardiovascular disorders, tended to have longer hospital stays for
+    diagnosis, treatment, and monitoring (Verweij *et al*., 2017).
+
+2.  **Comorbidities**: The presence of comorbidities, which refers to
+    the simultaneous occurrence of multiple medical conditions, can
+    complicate treatment plans and extend the hospital stay. Patients
+    with comorbidities often require additional medical tests,
+    consultations with various specialists, and tailored treatment
+    approaches (Rothberg *et al*., 2017).
+
+3.  **Invasive Procedures**: The need for invasive procedures, such as
+    surgeries or interventional treatments, is another factor
+    influencing ALOS. These procedures often require pre-operative
+    preparation, the actual operation, and post-operative care and
+    monitoring. The complexity and duration of the procedure, as well as
+    any complications that may arise, can extend the hospital stay
+    (Chakkera *et al*., 2018).
+
+4.  **Diagnostic Evaluations**: The length of hospital stay can be
+    influenced by the time required to conduct diagnostic evaluations.
+    Diagnostic procedures, including laboratory tests, radiological
+    investigations, and specialized consultations, contribute to the
+    ALOS. Delays in obtaining test results or consultation appointments
+    can prolong hospitalization (Gandelman *et al*., 2019).
+
+5.  **Bed Availability and Resource Constraints**: Hospital resource
+    availability, such as the number of available beds or healthcare
+    personnel, plays a role in determining ALOS. When hospitals
+    experience bed shortages or resource constraints, patients may
+    experience longer waits for admission or discharge. Additionally,
+    limited resources can impact patient flow, leading to extended stays
+    (Hamblin *et al*., 2016). ---
+
+## Implications:
+
+1.  **Healthcare Resource Utilization**: ALOS is an essential indicator
+    of healthcare resource utilization. Longer hospital stays require
+    greater allocation of resources, including bed occupancy, staffing,
+    medications, and equipment. Understanding ALOS can assist healthcare
+    systems in optimizing resource planning and capacity management.
+
+2.  **Cost Implications**: Longer hospital stays directly impact
+    healthcare costs. Prolonged hospitalization increases both direct
+    medical costs, such as medications and procedures, as well as
+    indirect costs, including longer-term care, rehabilitation, and
+    associated services. Reducing ALOS can optimize healthcare spending
+    and allow for better resource allocation.
+
+3.  **Patient Experience and Outcomes**: A shorter ALOS can positively
+    impact patient experiences and outcomes. Longer hospital stays may
+    lead to increased risk of hospital-acquired infections, reduced
+    mobility, psychological distress, and decreased overall satisfaction
+    with care. Minimizing ALOS can improve patient comfort and
+    satisfaction, potentially leading to better health outcomes.
+
+4.  **Capacity Management and Access**: Understanding ALOS helps
+    healthcare facilities manage their capacity efficiently. By
+    monitoring ALOS trends, hospitals can identify potential
+    bottlenecks, optimize patient flow, and reduce waiting times for
+    admissions and procedures. This can improve access to care, enhance
+    operational efficiency, and reduce overcrowding.
+
+# INPATIENT CARE ALOS vs CURATIVE CARE ALOS
+
+From the data frame of the `oecd_countries`, the mean ALOS for
+respective countries can be calculated by grouping by country and
+summarizing the mean for both Impatient Care ALOS and Curative Care ALOS
+
+```{r}
+mean_oecd_countries <- oecd_countries %>% 
+  group_by(country) %>% 
+  summarise(mean_inpatient_care_alos = mean(inpatient_care_alos), 
+            mean_curative_care_alos = mean(curative_care_alos)) %>% 
+  mutate(mean_inpatient_care_alos = round(mean_inpatient_care_alos, 1), 
+         mean_curative_care_alos = round(mean_curative_care_alos, 1)) %>% 
+  arrange(country)
+```
+
+## Data Table
+
+Now a glimpse of a structured table for the cleaned data set is
+produced. A randomly selected rows of the data table
+`mean_oecd_countries` can be seen and understood according to respective
+variable.
+
+```{r}
+mean_oecd_countries %>% 
+  slice(1:3, 15:17, 27:30) %>% 
+  kable(col.names = c("Country",
+                      "Inpatient Care ALOS",
+                      "Curative Care ALOS")) %>% 
+  kable_styling(bootstrap_options = "striped", full_width = F)
+```
+
+------------------------------------------------------------------------
+
+## Inpatient Care ALOS
+
+**Plotting the Mean Inpatient care ALOS for respective OECD Countries in
+the past decade**
+
+```{r fig.height=9, fig.width=11}
+ggplot(mean_oecd_countries, mapping = aes(x = reorder(country, mean_inpatient_care_alos), 
+                                          y = mean_inpatient_care_alos, 
+                                    group = country, fill = country)) + 
+  geom_col() + coord_flip() + theme_bw() +
+  geom_text(aes(label = mean_inpatient_care_alos, vjust = 0.4, hjust = -0.1)) +
+  theme(legend.position = "none") +
+  labs(title = "Inpatient Care Average Length of Stay within the last decade", 
+       subtitle = "Inpatient Care ALOS across the OECD Countries in Days", 
+       x = "OECD Countries", y = "Inpatient Care Average Lenght of Stay",
+       caption = "source: https://stats.oecd.org
+       Accessed Sunday 17th November, 2023")
+```
+
+Although both curative care ALOS and inpatient care ALOS are dropping
+over the years, countries such as `Japan` and `Korea` had the longest
+Inpatient average length of stay with **29.6** and **17.4** days
+respectively. Majority of the `countries` fell between **5.4** and
+**9.6** days, with Turkiye standing out with the best Days of **4.1**
+
+This means `Japan` and `Korea` has a poor healthcare efficiency and
+patient management and would be needing more investment in to healthcare
+facilities and resources from the health government to mitigate this
+high days.
+
+## Curative Care ALOS
+
+**Plotting the Mean Curative care ALOS for respective OECD Countries in
+the past decade**
+
+```{r fig.height=9, fig.width=11}
+ggplot(mean_oecd_countries, mapping = aes(x = reorder(country, mean_curative_care_alos), 
+                                            y = mean_curative_care_alos, 
+                                            fill = country)) + 
+  geom_col() + coord_flip() + theme_bw() +
+  geom_text(aes(label = mean_curative_care_alos, vjust = 0.4, hjust = -0.1)) +
+  theme(legend.position = "none") +
+  labs(title = "Curative Care Average Length of Stay within the last decade", 
+       subtitle = "Curative Care ALOS across the OECD Countries in Days", 
+       x = "OECD Countries", y = "Curative Care Average Lenght of Stay",
+       caption = "source: https://stats.oecd.org
+       Accessed Sunday 17th November, 2023")
+  
+```
+
+`Japan` still had the longest Curative care average length of stay with
+**16.8** days
+
+This is a confirmation that `Japan` has a poor healthcare efficiency and
+patient management and would be needing more investment in to healthcare
+facilities and resources from the health government.
+
+It appears Turkiye is still the best overall with just **4** days,
+followed by Australia and Israel. This signifies a very productive,
+organised and efficient healthcare system
+
+```{r fig.height=13, fig.width=17}
+mi <- ggplot(mean_oecd_countries, mapping = aes(x = reorder(country, mean_inpatient_care_alos), 
+                                          y = mean_inpatient_care_alos, 
+                                    group = country, fill = country)) + 
+  geom_col() + coord_flip() + theme_bw() +
+  geom_text(aes(label = mean_inpatient_care_alos, vjust = 0.4, hjust = -0.1)) +
+  theme(legend.position = "none") +
+  labs(title = "Inpatient Care Average Length of Stay within the last decade", 
+       subtitle = "Inpatient Care ALOS across the OECD Countries in Days", 
+       x = "OECD Countries", y = "Inpatient Care Average Lenght of Stay",
+       caption = "source: https://stats.oecd.org
+       Accessed Sunday 7th November, 2023")
+
+mc <- ggplot(mean_oecd_countries, mapping = aes(x = reorder(country, mean_curative_care_alos), 
+                                            y = mean_curative_care_alos, 
+                                            fill = country)) + 
+  geom_col() + coord_flip() + theme_bw() +
+  geom_text(aes(label = mean_curative_care_alos, vjust = 0.4, hjust = -0.1)) +
+  theme(legend.position = "none") +
+  labs(title = "Curative Care Average Length of Stay within the last decade", 
+       subtitle = "Curative Care ALOS across the OECD Countries in Days", 
+       x = "OECD Countries", y = "Curative Care Average Lenght of Stay",
+       caption = "source: https://stats.oecd.org
+       Accessed Sunday 17th November, 2023")
+
+mi + mc +
+  plot_annotation(title = "AVERAGE LENGTH OF STAY",
+                  subtitle = "Mean Average Length of Stay in OECD Nations", 
+                  tag_levels = "I") + 
+  plot_layout(guides = "collect")
+```
+
+------------------------------------------------------------------------
+
+# TRENDS IN ALOS
+
+1.  **Advancements in Medical Technology**: The rapid advancements in
+    medical technology, such as minimally invasive surgeries,
+    robotic-assisted procedures, and targeted therapies, have
+    contributed to shorter hospital stays. These advancements facilitate
+    faster recovery and minimize post-operative complications.
+
+2.  **Shift to Ambulatory Care**: As healthcare systems strive to reduce
+    costs and improve patient satisfaction, there has been a shift
+    towards ambulatory or outpatient care for certain conditions.
+    Procedures that were previously performed in hospitals are now being
+    done in outpatient settings, leading to shorter ALOS for appropriate
+    patients.
+
+3.  **Enhanced Discharge Planning**: Hospitals have recognized the
+    importance of efficient discharge planning to reduce ALOS. The
+    implementation of multidisciplinary discharge teams, early
+    identification of post-discharge needs, and coordination with
+    community healthcare providers have resulted in improved patient
+    flow and reduced hospital stays.
+
+4.  **Emphasis on Home Healthcare**: With the advent of telemedicine and
+    home healthcare services, patients can receive follow-up care and
+    monitoring in the comfort of their homes. This shift has helped in
+    minimizing hospital-acquired infections and reducing unnecessary
+    readmissions, ultimately leading to shorter ALOS.
+
+## Trend between Inpatient ALOS and Curative ALOS
+
+**Visualizing the Trend between Inpatient average length of stay and
+Curative care average length of stay in the OECD Countries from
+2010-2020**
+
+```{r fig.height=8, fig.width=10}
+ggplotly(ggplot(oecd_countries, mapping = aes(x = curative_care_alos, 
+                              y = inpatient_care_alos)) +
+geom_point(aes(color = country)) + scale_x_log10() + scale_y_log10() + 
+geom_smooth(method = "glm", se = FALSE) + theme(legend.position = "none") +
+labs(title = "Impatient Care ALOS vs Curative Care ALOS (OECD Nations) in the last decade", 
+     x = "Curative Care ALOS", y = "Inpatient Care ALOS", 
+     caption = "Source: https://stats.oecd.org"))
+```
+
+Majority of the data point ranged between **3.9-12** and **3.9-10** days
+for *Inpatient care ALOS* and *Curative care ALOS* respectively, with
+data points from `Japan` and `Korea` looking like outliers from the rest
+of data points from other `countries` as a result of their higher
+Inpatient average length of Stay in Hospitals.
+
+The General linear model method checks for correlation between the
+Impatient ALOS and Curative ALOS for respective countries. This
+concluded that there is a positive correlation between the Curative Care
+ALOS and Inpatient Care ALOS
+
+------------------------------------------------------------------------
+
+**Visualizing the Trend between Inpatient average length of stay and
+Curative care average length of stay in the OECD Countries for each
+years**
+
+```{r fig.height=8, fig.width=10}
+ggplotly(ggplot(oecd_countries, mapping = aes(x = curative_care_alos, 
+                              y = inpatient_care_alos)) +
+  geom_point(aes(color = country)) + scale_y_log10() + scale_x_log10() +
+  geom_smooth(method = "glm", se = FALSE) + facet_wrap(~year) +
+  theme(legend.position = "none") +
+  labs(title = "Impatient Care ALOS vs Curative Care ALOS in the last decade", 
+       x = "Curative Care ALOS", y = "Inpatient Care ALOS", 
+       caption = "Source: https://stats.oecd.org"))
+```
+
+## Significance
+
+The above plots indicating trend lines proves that the both curative
+care ALOS and inpatient care ALOS has a positive correlation and it
+statistically proven with a low `p-valve` of `0.001`. This means that as
+Curative care ALOS decrease, Inpatient care ALOS also decreased
+respectively, and an increase in one variable could also result in a
+increase in the other.
+
+```{r}
+oecd_countries %>% 
+summary_factorlist(dependent = "inpatient_care_alos", 
+                   explanatory = "curative_care_alos",
+                   p = TRUE,
+                   column = TRUE) %>% 
+  kable()
+```
+
+------------------------------------------------------------------------
+
+## Data from OECD & Non-OECD Nations
+
+**Including data from both oecd and non-oecd countries in the last
+decade without dropping any NA or Missing values**
+
+```{r}
+allclean_data <- wide_data %>%
+  select(year, country, 
+         inpatient_care_alos_days = inpatient_care_average_length_of_stay_all_hospitals_days, 
+         curative_care_alos_days = curative_care_average_length_of_stay_days) %>%
+  filter(!(year %in% c(2021:2022)))
+
+```
+
+## Trends 2.0
+
+**Visualizing the Trend between Inpatient average length of stay and
+Curative care average length of stay in both OECD & Non-OECD Countries
+from 2010-2020**
+
+```{r fig.height=8, fig.width=10}
+ggplotly(ggplot(allclean_data, mapping = aes(x = curative_care_alos_days, 
+                              y = inpatient_care_alos_days)) +
+  geom_point(aes(color = country)) + geom_smooth(method = "glm", se = F) + 
+  scale_y_log10() + scale_x_log10() + theme(legend.position = "none") +
+    labs(title = "Impatient Care ALOS vs Curative Care ALOS (OECD & Non-OECD Nations) in the last decade", x = "Curative Care ALOS_Days", y = "Inpatient Care ALOS_Days", 
+         caption = "Source: https://stats.oecd.org
+                    accessed Sunday 7th November, 2023"))
+```
+
+The above plots still proves that the curative care ALOS has a positive
+impact on the inpatient care ALOS and it statistically proven with a low
+`p-valve` of `0.001`
+
+```{r}
+allclean_data %>% 
+  summary_factorlist(dependent = "inpatient_care_alos_days", 
+                     explanatory = "curative_care_alos_days",
+                     p = TRUE,
+                     column = TRUE) %>% 
+  kable()
+```
+
+------------------------------------------------------------------------
+
+# CONCLUSION
+
+It was observed that as Curative care days dropped, Inpatient care days
+dropped as years went on across most countries. This indicates a
+positive correlation between the two variables.
+
+This could mean that aiming for shorter Curative care days could further
+shorten the Inpatient care days since the former can be a subset of the
+later thereby improving healthcare efficiency in a given country and
+across the globe.
+
+Some of the times, Patients who require curative care could end up
+receiving impatient care due to some of the factors that can increase
+the length of stay. This is are most time beyond the hospital power and
+could have negative impact on the healthcare system.
+
+# RECOMMENDATION
+
+Recent trends signify a shift towards shorter hospital stays due to
+advancements in medical technology, increased emphasis on ambulatory
+care, improved discharge planning, and the integration of home
+healthcare services (Curative Care).
+
+As healthcare continues to evolve, improving efficiency and reducing the
+ALOS should remain a priority to enhance patient outcomes and optimize
+resource utilization.
+
+Healthcare Researchers can understand ALOS in hospitals and know that
+the inpatient care ALOS is the major indicator for efficiency.
+
+Although Having fully equipped hospitals settings in a given country is
+paramount to measuring the Inpatient Care ALOS, investment into curative
+care by integration of home care services and more ambulatory care is a
+big advantage as this can positively impact Inpatient ALOS days by
+reducing the amount of beds occupied my patients, thereby facilitating
+better patient management for the few admitted patient. This topic
+appears to be statistically proven.
+
+# REFERNCES
+
+1.  Chakkera, H. A., *et al.* (2018). Surgical Procedures and Length of
+    Stay for Kidney Transplantation: A Single-Center Experience.
+    Transplantation Proceedings, 50(6), 1713-1716.
+
+2.  Gandelman, G., *et al.* (2019). A novel laboratory-based admissions
+    risk score to predict the average length of stay. PloS One, 14(6),
+    e0218671.
+
+3.  Hamblin, P., *et al.* (2016). Hospital utilization and average
+    length of stay in the emergency department: a benchmarking approach.
+    BMC Health Services Research, 16(1), 1-7.
+
+4.  Rothberg, M. B., *et al.* (2017). Factors associated with the costs
+    and outcomes of hospitalized patients with exacerbation of chronic
+    obstructive pulmonary disease. Journal of General Internal Medicine,
+    32(2), 159-165.
+
+5.  Verweij, L., *et al.* (2017). Patient characteristics and treatment
+    patterns contributing to long hospital stays in patients with major
+    depressive disorder. PloS One, 12(3), e0170748.
+
+**by B239464 to Healthcare Researchers**
