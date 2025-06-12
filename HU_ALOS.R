@@ -1,4 +1,5 @@
-# Loading necessary packages
+# Loading necessary packages on R script. My first project on R. 
+## It was quite rough.. Lol ##
 
 #if(!require(pacman)) install.packages('pacman')
 pacman:: p_load(
